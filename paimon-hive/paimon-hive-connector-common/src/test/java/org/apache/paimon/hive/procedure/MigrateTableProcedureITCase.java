@@ -188,7 +188,7 @@ public class MigrateTableProcedureITCase extends ActionITCaseBase {
         catalogConf.put(
                 "warehouse", System.getProperty(HiveConf.ConfVars.METASTOREWAREHOUSE.varname));
         MigrateTableAction migrateTableAction =
-                new MigrateTableAction("hive", "default.hivetable", catalogConf, "", 6);
+                new MigrateTableAction("hive", "default.hivetable", catalogConf, "", 6, "");
         migrateTableAction.run();
 
         tEnv.executeSql(
