@@ -86,10 +86,7 @@ public class MigrateFileProcedure extends ProcedureBase {
             boolean deleteOrigin,
             Integer parallelism)
             throws Exception {
-        if (!connector.equals("hive")) {
-            throw new IllegalArgumentException("MigrateFile only support hive connector now.");
-        }
-
+        Identifier sourceTableId = Identifier.fromString(sourceTablePath);
         Identifier targetTableId = Identifier.fromString(targetPaimonTablePath);
 
         try {
@@ -103,7 +100,8 @@ public class MigrateFileProcedure extends ProcedureBase {
                 TableMigrationUtils.getImporter(
                         connector,
                         catalog,
-                        sourceTablePath,
+                        sourceTableId.getDatabaseName(),
+                        sourceTableId.getObjectName(),
                         targetTableId.getDatabaseName(),
                         targetTableId.getObjectName(),
                         parallelism,
