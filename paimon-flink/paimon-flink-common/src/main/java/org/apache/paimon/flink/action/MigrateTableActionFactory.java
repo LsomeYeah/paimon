@@ -30,6 +30,9 @@ public class MigrateTableActionFactory implements ActionFactory {
     private static final String OPTIONS = "options";
     private static final String PARALLELISM = "parallelism";
 
+    private static final String TARGET_TYPE = "target_type";
+    private static final String ICEBERG_OPTIONS = "iceberg_options";
+
     @Override
     public String identifier() {
         return IDENTIFIER;
@@ -42,7 +45,11 @@ public class MigrateTableActionFactory implements ActionFactory {
         String sourceHiveTable = params.get(TABLE);
         Map<String, String> catalogConfig = optionalConfigMap(params, CATALOG_CONF);
         String tableConf = params.get(OPTIONS);
-        Integer parallelism = Integer.parseInt(params.get(PARALLELISM));
+        Integer parallelism =
+                params.get(PARALLELISM) == null ? null : Integer.parseInt(params.get(PARALLELISM));
+
+        String targetPaimonTable = params.get(TARGET_TYPE);
+        String icebergOptions = params.get(ICEBERG_OPTIONS);
 
         MigrateTableAction migrateTableAction =
                 new MigrateTableAction(
@@ -51,7 +58,9 @@ public class MigrateTableActionFactory implements ActionFactory {
                         sourceHiveTable,
                         catalogConfig,
                         tableConf,
-                        parallelism);
+                        parallelism,
+                        targetPaimonTable,
+                        icebergOptions);
         return Optional.of(migrateTableAction);
     }
 
