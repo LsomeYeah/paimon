@@ -18,57 +18,56 @@
 
 package org.apache.paimon.hive.procedure;
 
-import org.apache.paimon.hive.runner.PaimonEmbeddedHiveRunner;
+import org.apache.paimon.hive.TestHiveMetastore;
 
 import org.apache.paimon.shade.guava30.com.google.common.collect.ImmutableList;
 
-import com.klarna.hiverunner.HiveShell;
-import com.klarna.hiverunner.annotations.HiveSQL;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
 import org.apache.flink.table.api.internal.TableEnvironmentImpl;
 import org.apache.flink.types.Row;
 import org.assertj.core.api.Assertions;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.rules.TemporaryFolder;
-import org.junit.runner.RunWith;
 
 import java.util.Arrays;
 import java.util.stream.Stream;
 
 /** IT cases for migrating iceberg table to paimon table. */
-@RunWith(PaimonEmbeddedHiveRunner.class)
-public abstract class MigrateIcebergTableProcedureITCase {
-    @Rule public TemporaryFolder folder = new TemporaryFolder();
+public class MigrateIcebergTableProcedureITCase {
+    private static final TestHiveMetastore TEST_HIVE_METASTORE = new TestHiveMetastore();
+
+    private static final int PORT = 9084;
 
     @TempDir private java.nio.file.Path iceTempDir;
     @TempDir private java.nio.file.Path paiTempDir;
 
-    @HiveSQL(files = {})
-    protected static HiveShell hiveShell;
+    @BeforeEach
+    public void beforeEach() {
+        TEST_HIVE_METASTORE.start(PORT);
+    }
+
+    @AfterEach
+    public void afterEach() throws Exception {
+        TEST_HIVE_METASTORE.stop();
+    }
 
     private static Stream<Arguments> testIcebergArguments() {
         return Stream.of(Arguments.of(true, false), Arguments.of(false, false));
     }
 
     @Test
-    public void initTest() {}
-
-    @ParameterizedTest
-    @MethodSource("testIcebergArguments")
-    public void testMigrateIcebergUnPartitionedTable(boolean isPartitioned, boolean isHive)
-            throws Exception {
+    public void testMigrateIcebergTableInHadoop() throws Exception {
+        boolean isPartitioned = true;
         TableEnvironment tEnv =
                 TableEnvironmentImpl.create(
                         EnvironmentSettings.newInstance().inBatchMode().build());
 
         // create iceberg catalog, database, table, and insert some data to iceberg table
-        tEnv.executeSql(icebergCatalogDdl(isHive));
+        tEnv.executeSql(icebergCatalogDdl(false));
         tEnv.executeSql("USE CATALOG my_iceberg");
         tEnv.executeSql("CREATE DATABASE iceberg_db;");
         if (isPartitioned) {
@@ -82,15 +81,50 @@ public abstract class MigrateIcebergTableProcedureITCase {
         tEnv.executeSql("INSERT INTO iceberg_db.iceberg_table VALUES ('a',1,1),('b',2,2),('c',3,3)")
                 .await();
 
-        tEnv.executeSql(paimonCatalogDdl(isHive));
+        tEnv.executeSql(paimonCatalogDdl(false));
         tEnv.executeSql("USE CATALOG my_paimon");
         tEnv.executeSql(
                         String.format(
-                                "CALL sys.migrate_table(connector => 'iceberg', "
-                                        + "iceberg_options => 'iceberg-meta-path=%s,target-database=%s,target-table=%s')",
-                                iceTempDir + "/iceberg_db/iceberg_table/metadata",
-                                "paimon_db",
-                                "paimon_table"))
+                                "CALL sys.migrate_table(connector => 'iceberg', source_table => '%s', target_table => '%s', "
+                                        + "iceberg_options => 'metadata.iceberg.storage=hadoop-catalog,iceberg_warehouse=%s')",
+                                "iceberg_db.iceberg_table", "paimon_db.paimon_table", iceTempDir))
+                .await();
+
+        Assertions.assertThatList(
+                        Arrays.asList(Row.of("a", 1, 1), Row.of("b", 2, 2), Row.of("c", 3, 3)))
+                .containsExactlyInAnyOrderElementsOf(
+                        ImmutableList.copyOf(
+                                tEnv.executeSql("SELECT * FROM paimon_db.paimon_table").collect()));
+    }
+
+    @Test
+    public void testMigrateIcebergTableInHive() throws Exception {
+        boolean isPartitioned = true;
+        TableEnvironment tEnv =
+                TableEnvironmentImpl.create(
+                        EnvironmentSettings.newInstance().inBatchMode().build());
+
+        // create iceberg catalog, database, table, and insert some data to iceberg table
+        tEnv.executeSql(icebergCatalogDdl(true));
+        tEnv.executeSql("USE CATALOG my_iceberg");
+        tEnv.executeSql("CREATE DATABASE iceberg_db;");
+        if (isPartitioned) {
+            tEnv.executeSql(
+                    "CREATE TABLE iceberg_db.iceberg_table (id string, id2 int, id3 int) PARTITIONED BY (id3)");
+        } else {
+            tEnv.executeSql(
+                    "CREATE TABLE iceberg_db.iceberg_table (id string, id2 int, id3 int) WITH ('format-version'='2')");
+        }
+        tEnv.executeSql("INSERT INTO iceberg_db.iceberg_table VALUES ('a',1,1),('b',2,2),('c',3,3)")
+                .await();
+
+        tEnv.executeSql(paimonCatalogDdl(false));
+        tEnv.executeSql("USE CATALOG my_paimon");
+        tEnv.executeSql(
+                        String.format(
+                                "CALL sys.migrate_table(connector => 'iceberg', source_table => '%s', target_table => '%s', "
+                                        + "iceberg_options => 'metadata.iceberg.storage=hive-catalog, metadata.iceberg.uri= ')",
+                                "iceberg_db.iceberg_table", "paimon_db.paimon_table"))
                 .await();
 
         Assertions.assertThatList(
@@ -104,9 +138,9 @@ public abstract class MigrateIcebergTableProcedureITCase {
         return isHive
                 ? String.format(
                         "CREATE CATALOG my_iceberg WITH "
-                                + "( 'type' = 'iceberg', 'catalog-type' = 'hive', 'uri' = '', "
-                                + "'warehouse' = '%s', 'cache-enabled' = 'false' )",
-                        iceTempDir)
+                                + "( 'type' = 'iceberg', 'catalog-type' = 'hive', 'uri' = 'thrift://localhost:%s', "
+                                + "'warehouse' = '%s', 'cache-enabled' = 'false')",
+                        PORT, iceTempDir)
                 : String.format(
                         "CREATE CATALOG my_iceberg WITH "
                                 + "( 'type' = 'iceberg', 'catalog-type' = 'hadoop',"
@@ -118,9 +152,9 @@ public abstract class MigrateIcebergTableProcedureITCase {
         return isHive
                 ? String.format(
                         "CREATE CATALOG my_paimon WITH "
-                                + "( 'type' = 'paimon', 'metastore' = 'hive', 'uri' = '', "
+                                + "( 'type' = 'paimon', 'metastore' = 'hive', 'uri' = 'thrift://localhost:%s', "
                                 + "'warehouse' = '%s', 'cache-enabled' = 'false' )",
-                        iceTempDir)
+                        PORT, iceTempDir)
                 : String.format(
                         "CREATE CATALOG my_paimon WITH ('type' = 'paimon', 'warehouse' = '%s')",
                         paiTempDir);
