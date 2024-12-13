@@ -89,7 +89,6 @@ public class TableMigrationUtils {
                         sourceDatabase,
                         sourceTableName,
                         icebergConf,
-                        icebergConf.getBoolean("ignore.delete", false),
                         parallelism);
             default:
                 throw new UnsupportedOperationException("Don't support connector " + connector);
