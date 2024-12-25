@@ -37,7 +37,6 @@ public class MigrateTableAction extends ActionBase {
 
     public MigrateTableAction(
             String connector,
-            String warehouse,
             String hiveTableFullName,
             Map<String, String> catalogConfig,
             String tableProperties,
@@ -53,14 +52,13 @@ public class MigrateTableAction extends ActionBase {
 
     public MigrateTableAction(
             String connector,
-            String warehouse,
             String hiveTableFullName,
             Map<String, String> catalogConfig,
             String tableProperties,
             Integer parallelism,
             String paimonTableFullName,
             String icebergProperties) {
-        super(warehouse, catalogConfig);
+        super(catalogConfig);
         this.connector = connector;
         this.hiveTableFullName = hiveTableFullName;
         this.tableProperties = tableProperties;

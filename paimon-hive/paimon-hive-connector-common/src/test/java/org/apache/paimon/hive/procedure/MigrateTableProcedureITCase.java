@@ -322,7 +322,6 @@ public class MigrateTableProcedureITCase extends ActionITCaseBase {
         MigrateTableAction migrateTableAction =
                 new MigrateTableAction(
                         "iceberg",
-                        paiTempDir.toString(),
                         "default." + icebergTable,
                         catalogConf,
                         "",
