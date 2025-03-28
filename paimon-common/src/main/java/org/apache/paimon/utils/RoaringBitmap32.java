@@ -44,6 +44,10 @@ public class RoaringBitmap32 {
         this.roaringBitmap = roaringBitmap;
     }
 
+    public RoaringBitmap get() {
+        return roaringBitmap;
+    }
+
     public void add(int x) {
         roaringBitmap.add(x);
     }
